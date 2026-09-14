@@ -37,6 +37,7 @@ resume_render_v*/
 
 # Private/proprietary data. Use knowledge.example.txt for a public demo.
 knowledge.txt
+source_manifest.json
 eval_set.jsonl
 eval_bad_cases.jsonl
 

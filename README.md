@@ -8,14 +8,14 @@
 
 - **面向业务的检索路由**：按产品、管理人、策略和对比类问题选择检索路径，再结合向量检索与重排序。
 - **可解释的结果呈现**：流式输出答案，并按问题类型补充业绩、基准或组合图表。
-- **知识库治理**：内容哈希、版本快照、索引重建、回滚和审计记录。
+- **知识库治理**：内容哈希、版本快照、索引重建、回滚、审计与来源登记；引用可显示资料、数据截止日和版本。
 - **可回归评测**：支持检索命中、事实一致性、引用完整性与合规行为等维度。
 - **演示友好界面**：Gradio 多标签页覆盖问答、组合分析、风格分析与管理入口。
 
 ## 架构概览
 
 ```text
-知识库文本 → 解析与切分 → Embedding → Chroma 向量库
+Wiki / PDF / Excel 导出 → 来源登记 + 解析与切分 → Embedding → Chroma 向量库
                                       ↓
 用户问题 → 意图识别/规则路由 → 召回 + Rerank → DeepSeek → 流式回答 / 图表
                                       ↓
@@ -37,6 +37,7 @@ python -m pip install -r requirements.txt
 
 # 使用可公开的脱敏样例数据
 Copy-Item knowledge.example.txt knowledge.txt
+Copy-Item source_manifest.example.json source_manifest.json
 
 # 填写自己的 DeepSeek Key；.env 已被 Git 忽略
 Copy-Item .env.example .env
@@ -56,7 +57,11 @@ python app.py
 3. 打开“管理台”，说明知识库哈希、重建、版本快照、回滚和回归评测如何降低内容更新风险。
 4. 强调系统的边界：它提供资料检索与客观比较，而非个性化投资建议。
 
-公开仓库内的 `knowledge.example.txt` 使用虚构数据，只用于演示。真实知识库、评测集、Chroma 索引、模型缓存和历史报告均被 `.gitignore` 排除。提交前请确认你对任何演示数据拥有公开和再分发的权限。
+公开仓库内的 `knowledge.example.txt` 与 `source_manifest.example.json` 使用虚构数据，只用于演示。真实知识库、来源登记、评测集、Chroma 索引、模型缓存和历史报告均被 `.gitignore` 排除。提交前请确认你对任何演示数据拥有公开和再分发的权限。
+
+## Wiki / 来源治理
+
+这里的 Wiki 是团队维护的受控知识库，不是维基百科。本项目不会伪装成已经接入某个企业 Wiki；它通过 `source_manifest.json` 登记 Wiki 导出、PDF 或 Excel 清洗结果的资料名、原始链接、责任人、数据截止日、版本和访问级别。来源清单与知识库正文任一变化都会触发索引重建。生产接入原则与字段说明见 [docs/knowledge-governance.md](docs/knowledge-governance.md)。
 
 ## 可直接演示的提问
 
@@ -96,6 +101,9 @@ python -m unittest discover -s tests -v
 ├── app.py                     # Gradio 演示界面
 ├── rag_graph业绩.py            # RAG 流程、检索路由、图表与分析能力
 ├── kb_management.py           # 知识库校验、版本、审计与状态管理
+├── source_registry.py          # 受控来源登记与引用元数据
+├── source_manifest.example.json # Wiki/PDF/Excel 来源登记样例
+├── docs/knowledge-governance.md # Wiki、来源与权限治理说明
 ├── manage_kb.py               # 知识库管理命令行入口
 ├── evaluate_rag.py            # 回归评测脚本
 ├── knowledge.example.txt      # 可公开的脱敏样例数据

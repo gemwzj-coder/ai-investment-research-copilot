@@ -198,9 +198,16 @@ def setup_chinese_font():
 
 
 def load_knowledge_qa(file_path='knowledge.txt'):
-    """按 \\n\\nQ: 分割，保持每条完整问答"""
+    """按 \\n\\nQ: 分割，并为每条问答附加可审计的来源元数据。"""
+    from source_registry import provenance_line, source_for_file
+
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
+
+    manifest_path = os.getenv('KNOWLEDGE_SOURCE_MANIFEST', 'source_manifest.json')
+    source = source_for_file(file_path, manifest_path)
+    source_metadata = {'source': file_path, **source} if source else {'source': file_path}
+    provenance = provenance_line(source)
 
     qa_blocks = content.split('\n\nQ: ')
     documents = []
@@ -215,9 +222,13 @@ def load_knowledge_qa(file_path='knowledge.txt'):
             if len(lines) == 2 and lines[1].strip():
                 block = lines[0] + '\nA: ' + lines[1]
         if 'A: ' in block:
-            documents.append(Document(page_content=block.strip(), metadata={'source': file_path}))
+            page_content = block.strip()
+            if provenance:
+                page_content += '\n' + provenance
+            documents.append(Document(page_content=page_content, metadata=source_metadata))
 
-    print(f"📚 加载了 {len(documents)} 条完整问答")
+    source_note = f"，来源：{source.get('title')}" if source else "，未登记来源清单"
+    print(f"📚 加载了 {len(documents)} 条完整问答{source_note}")
     return documents
 
 
@@ -1034,7 +1045,7 @@ def compliance_guardrail(question: str) -> Optional[str]:
 
 
 def source_footer(context: str, max_items: int = 3) -> str:
-    """把本次 RAG 上下文中的问答标题作为可读、可复核的检索依据。"""
+    """输出知识块标题及其受控来源、数据截止日和版本。"""
     labels = []
     for label in re.findall(r'(?:^|\n)Q:\s*([^\n]+)', context or ''):
         label = re.sub(r'\s+', ' ', label).strip()
@@ -1042,10 +1053,27 @@ def source_footer(context: str, max_items: int = 3) -> str:
             labels.append(label)
         if len(labels) >= max_items:
             break
-    if not labels:
+    source_labels = []
+    for raw in re.findall(r'【来源元数据】([^\n]+)', context or ''):
+        fields = dict(re.findall(r'(资料|数据截至|版本|链接)=([^；]+)', raw))
+        title = fields.get('资料')
+        if not title:
+            continue
+        label = f"{title}｜数据截至：{fields.get('数据截至', '未知')}｜版本：{fields.get('版本', '未知')}"
+        link = fields.get('链接')
+        item = (label, link)
+        if item not in source_labels:
+            source_labels.append(item)
+        if len(source_labels) >= max_items:
+            break
+
+    if not labels and not source_labels:
         return ''
-    bullets = '\n'.join(f'- 【来源：{label}】' for label in labels)
-    return f'\n\n📚 **检索依据（内部知识库）**\n{bullets}'
+    bullets = [f'- 【来源：{label}】' for label in labels]
+    for label, link in source_labels:
+        suffix = f'（原始资料：{link}）' if link else ''
+        bullets.append(f'- 【资料元信息：{label}】{suffix}')
+    return f'\n\n📚 **检索依据（内部知识库）**\n' + '\n'.join(bullets)
 
 
 class RAGApplication:
@@ -1075,6 +1103,7 @@ class RAGApplication:
             )
 
         import kb_management as kbm
+        manifest_path = os.getenv('KNOWLEDGE_SOURCE_MANIFEST', 'source_manifest.json')
 
         print("🔄 正在初始化 RAG 系统...")
         self.documents = load_knowledge_qa(knowledge_path)
@@ -1094,7 +1123,7 @@ class RAGApplication:
         )
 
         persist_dir = './chroma_db'
-        if kbm.should_rebuild(knowledge_path, persist_dir):
+        if kbm.should_rebuild(knowledge_path, persist_dir, manifest_path):
             kbm.snapshot_knowledge(knowledge_path)
             if os.path.exists(persist_dir):
                 shutil.rmtree(persist_dir)
@@ -1129,7 +1158,7 @@ class RAGApplication:
             except Exception as e:
                 print(f"ℹ️ 向量库文档数自检跳过：{e}")
 
-        kbm.record_build(knowledge_path, len(self.documents))
+        kbm.record_build(knowledge_path, len(self.documents), manifest_path=manifest_path)
 
         self.base_retriever = self.vectorstore.as_retriever(
             search_type="similarity",

@@ -73,13 +73,26 @@ def data_date_of(text: str):
     return max(dates).strftime('%Y-%m-%d')
 
 
-def should_rebuild(knowledge_path: str, persist_dir: str) -> bool:
-    """向量库缺失，或知识库文件哈希与上次构建不一致时，需要重建。"""
+def source_fingerprint(knowledge_path: str, manifest_path: str = '') -> str:
+    """知识库正文与来源登记共同决定索引版本。"""
+    h = hashlib.sha256()
+    for path in (knowledge_path, manifest_path):
+        if not path or not os.path.exists(path):
+            continue
+        h.update(os.path.abspath(path).encode('utf-8'))
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(65536), b''):
+                h.update(chunk)
+    return h.hexdigest()
+
+
+def should_rebuild(knowledge_path: str, persist_dir: str, manifest_path: str = '') -> bool:
+    """正文或来源登记变化、或向量库缺失时，重建索引。"""
     if not os.path.exists(persist_dir) or not os.listdir(persist_dir):
         return True
     state = load_state()
-    current = file_sha256(knowledge_path)
-    return state.get('file_sha256') != current
+    current = source_fingerprint(knowledge_path, manifest_path)
+    return state.get('source_fingerprint', state.get('file_sha256')) != current
 
 
 def snapshot_knowledge(knowledge_path: str) -> str:
@@ -96,7 +109,7 @@ def snapshot_knowledge(knowledge_path: str) -> str:
     return version_id
 
 
-def record_build(knowledge_path: str, doc_count: int, note: str = '') -> None:
+def record_build(knowledge_path: str, doc_count: int, note: str = '', manifest_path: str = '') -> None:
     """构建成功后记录状态 + 审计。"""
     digest = file_sha256(knowledge_path)
     with open(knowledge_path, 'r', encoding='utf-8') as f:
@@ -104,6 +117,8 @@ def record_build(knowledge_path: str, doc_count: int, note: str = '') -> None:
     state = {
         'knowledge_path': os.path.abspath(knowledge_path),
         'file_sha256': digest,
+        'source_fingerprint': source_fingerprint(knowledge_path, manifest_path),
+        'source_manifest_path': os.path.abspath(manifest_path) if manifest_path else None,
         'file_size': os.path.getsize(knowledge_path),
         'docs': doc_count,
         'data_date': data_date_of(content),

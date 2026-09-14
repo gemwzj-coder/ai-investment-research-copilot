@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {
+      "id": "public-demo-kb-20260814",
+      "title": "公开脱敏投研资料示例",
+      "source_type": "wiki_export",
+      "source_url": "demo://public-sanitized-investment-research/2026-08-14",
+      "owner": "投研运营（演示）",
+      "updated_at": "2026-08-14",
+      "data_as_of": "2026-08-14",
+      "access_level": "internal_demo",
+      "version": "v2026.08.14",
+      "file": "knowledge.txt"
+    }
+  ]
+}

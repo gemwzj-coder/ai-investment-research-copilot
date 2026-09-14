@@ -32,6 +32,17 @@ A: 重复回答
         issue_types = {issue["type"] for issue in report["issues"]}
         self.assertIn("duplicate_question", issue_types)
 
+    def test_source_fingerprint_changes_when_manifest_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            knowledge = Path(directory) / "knowledge.txt"
+            manifest = Path(directory) / "source_manifest.json"
+            knowledge.write_text("Q: test\nA: answer\n", encoding="utf-8")
+            manifest.write_text('{"sources": []}', encoding="utf-8")
+            first = kbm.source_fingerprint(str(knowledge), str(manifest))
+            manifest.write_text('{"sources": [{"id": "new"}]}', encoding="utf-8")
+
+            self.assertNotEqual(first, kbm.source_fingerprint(str(knowledge), str(manifest)))
+
 
 if __name__ == "__main__":
     unittest.main()
